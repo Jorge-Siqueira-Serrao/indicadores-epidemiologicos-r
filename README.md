@@ -22,3 +22,9 @@ O projeto está dividido em quatro módulos progressivos, cada um contendo suas 
 1. Clone ou faça o download deste repositório.
 2. Abra o RStudio e crie um projeto apontando para a pasta raiz (`File > New Project > Existing Directory`).
 3. **Atenção aos caminhos de leitura:** Como os arquivos foram organizados nas subpastas `modulo-XX/dados/` e `modulo-XX/scripts/`, ajuste o diretório de trabalho ou os caminhos relativos (`"dados/arquivo.dbf"`) antes de executar cada script.
+
+## Fonte e Referência
+
+Os scripts e bases de dados deste repositório foram desenvolvidos e utilizados durante as atividades práticas de capacitação avançada disponibilizadas pela plataforma [ProEpi / Ministério da Saúde](https://profepi.saude.gov.br/).
+
+> **Trilha de Estudos:** Veja também a primeira parte desta série (fundamentos e manipulação inicial) no repositório [Análise de Dados Epidemiológicos em R](https://github.com/Jorge-Siqueira-Serrao/analise-dados-epidemiologicos-r).
