@@ -1,0 +1,394 @@
+---
+title: "Monitoramento Indicadores PQA-VS"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+    runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+# Carregar pacotes necessários
+library(flexdashboard)
+library(shiny)
+library(sf)
+library(tidyverse)
+library(DT)
+library(plotly)
+library(lubridate)
+library(rio)
+library(janitor)
+library(kableExtra)
+library(gt)
+library(leaflet)
+library(RColorBrewer)
+
+# Definindo a pasta de trabalho
+setwd("/Users/elisangelalizzi/Documents/OPAS- Ministério da Saúde/Curso - R para vigilância em Saúde - Nível 02/Produção de conteúdo/Dados")
+
+# Carregar os dados
+nindinet <- import("NINDINET_PROFEPI.dbf")
+municipios <- import("MUNICNET.dbf")
+pr <- st_read("PR_Municipios_2022.shp")
+
+# Dados iniciais para pré processamento do indicador
+dados_filtradosn <- nindinet %>%
+  filter(ID_AGRAVO == "A509", !grepl("^4", NU_IDADE_N))
+
+dados_filtradosd <- nindinet %>%
+  filter(ID_AGRAVO == "O981")
+
+numerador <- dados_filtradosn %>%
+  group_by(ID_MUNICIP) %>%
+  summarise(Total_Valido = n())
+
+denominador <- dados_filtradosd %>%
+  group_by(ID_MUNICIP) %>%
+  summarise(Total_Notificacoes = n())
+
+resultado <- left_join(numerador, denominador, by = "ID_MUNICIP") %>%
+  mutate(Indicador = round((Total_Valido / Total_Notificacoes), 4) * 100)
+
+# Adicionar os nomes dos municípios (vinculando com a tabela `municipios`)
+tabela_final <- resultado %>%
+  left_join(municipios %>% select(ID_MUNICIP, NM_MUNICIP), by = "ID_MUNICIP")
+
+# Reordenar as colunas para exibir o nome dos municípios primeiro (opcional)
+tabela_final <- tabela_final %>%
+  select(NM_MUNICIP, everything())
+
+### No shapefile atenção para o número de digitos do código.
+## Fazendo a conversão ###
+# Converter coluna ID_MUNICIP para o mesmo tipo do banco de dados
+# Converter CD_MUN para caracteres e criar ID_MUNICIP com os primeiros 6 dígitos
+pr$ID_MUNICIP <- substr(as.character(pr$CD_MUN), 1, 6)
+municipios$ID_MUNICIP <- as.character(municipios$ID_MUNICIP)
+
+## Nos dados de municipios filtrar somente paraná
+dados_pr<- subset(municipios, UF_IBGE == "41")
+
+
+# Fazer o linkage dos dados por código do municipio
+dados_pr2=left_join(dados_pr,tabela_final, by="ID_MUNICIP")
+
+# Substituir valores NA por 0 (obs:caso haja municípios sem notificações válidas ou totais)
+# Em caso de análises mais robustas fazer imputação de dados por métodos especificos
+summary(dados_pr2$Indicador)
+
+
+# Fazer o linkage dos dados
+dados_final=merge(pr,dados_pr2, by="ID_MUNICIP",sort=FALSE)
+
+
+### Abaixo código em CSS, suportado pelo shiny para adicionar barras de rolagens nas páginas individuais
+
+```
+
+
+<!– seu comentário aqui –>
+<style>
+/* Adiciona barra de rolagem geral ao conteúdo */
+.main-container {
+  overflow-y: auto;
+  height: 100vh;
+  padding: 10px;
+}
+
+/* Adiciona barra de rolagem nas abas */
+.tab-content {
+  overflow-y: auto;
+  max-height: calc(100vh - 120px);
+}
+
+/* Estiliza a barra de rolagem (opcional) */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #888;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #555;
+}
+</style>
+
+
+
+
+
+# Indicador 11 - PQA-VS
+
+Este painel é um produto do Curso Análise e Visualização de Dados com Software R aplicadas à Vigilância em Saúde e Ambiente, do Programa de Fortalecimento da Epidemiologia nos Serviços de Saúde - PROFEPI. Uma parceria do Ministério da Saúde, por meio da Secretaria de Vigilância em Saúde e Ambiente - SVSA e Organização Pan Americana da Saúde - OPAS. 
+
+Rows
+-----------------------------------------------------------------------
+
+### Meta Indicador 11
+
+```{r}
+# Cálculo da meta
+# Total Notificações-Sífilis Crianças < 1 ano
+numerador1 <- sum(tabela_final$Total_Valido, na.rm=T)
+
+# Total de Notificações-Sífilis Gestantes
+denominador1 <-sum(tabela_final$Total_Notificacoes, na.rm=T)
+
+# Meta indicador
+meta_pr <- (numerador1/denominador1)*100
+
+
+# Criação do medidor com gauge()
+
+gauge(meta_pr, min = 0, max = 100, symbol = '%',
+      gaugeSectors(success = c(0, 9), warning = c(10,39), danger = c(40,100)))
+
+```
+
+### Notificações do total de Sífilis Crianças < 1 ano
+
+```{r}
+# Total Notificações-Sífilis Crianças < 1 ano
+numerador <- sum(tabela_final$Total_Valido, na.rm = T)
+valueBox(numerador, icon = "fa-solid fa-child")
+
+```
+
+### Notificações do total de Sífilis Gestantes
+
+```{r}
+
+# Total de Notificações-Sífilis Gestantes
+denominador <- sum(tabela_final$Total_Notificacoes , na.rm = T)
+valueBox(denominador,icon = "fa-solid fa-person-pregnant")
+
+```
+
+### Número de municípios com notificação
+
+```{r}
+
+
+mun_notificacao <- tabela_final |>
+                  filter(!is.na(Indicador)) |> 
+                  nrow()
+
+valueBox(mun_notificacao,
+        icon = "fa-solid fa-city")
+
+```
+
+
+Rows {.tabset .tabset-fade}
+-----------------------------------------------------------------------
+
+Navegue pelas abas abaixo para ver o resultado por Municipio e a evolução temporal.
+
+### Resultado do Indicador 11 por município
+
+```{r}
+
+# Criando uma tabela com o resultado por município
+
+datatable(tabela_final , options = list(pageLength = 10),
+          colnames = c("Nome do Município","Código Município", "Notificações < 1 ano", 
+                       "Notificações Gestantes", "Indicador (%)"))
+
+```
+
+
+
+
+
+
+
+
+
+### Resultado do indicador 11 evolução mensal
+```{r}
+
+nindinet <- nindinet %>%
+  mutate(Mes_Ano = format(as.Date(DT_NOTIFIC), "%Y-%m"))
+
+# Filtrar os casos para o numerador: sífilis congênita em crianças menores de 1 ano
+dados_filtradosn <- nindinet %>%
+  filter(ID_AGRAVO == "A509", !grepl("^4", NU_IDADE_N))
+
+# Filtrar os casos para o denominador: sífilis em gestantes
+dados_filtradosd <- nindinet %>%
+  filter(ID_AGRAVO == "O981")
+# Contar total de notificações para o numerador por mês
+numerador <- dados_filtradosn %>%
+  group_by(Mes_Ano) %>%
+  summarise(Total_Valido = n(), .groups = "drop")
+
+# Contar total de notificações para o denominador por mês
+denominador <- dados_filtradosd %>%
+  group_by(Mes_Ano) %>%
+  summarise(Total_Notificacoes = n(), .groups = "drop")
+# Juntar os dados do numerador e denominador
+resultado <- left_join(numerador, denominador, by = "Mes_Ano")
+
+# Calcular o indicador por mês
+resultado <- resultado %>%
+  mutate(Indicador = round((Total_Valido / Total_Notificacoes),4) * 100)
+
+# Adicionar uma linha para o total geral
+resultado_total <- resultado %>%
+  summarise(Mes_Ano = "Total Geral",
+            Total_Valido = sum(Total_Valido, na.rm = TRUE),
+            Total_Notificacoes = sum(Total_Notificacoes, na.rm = TRUE),
+            Indicador = round((Total_Valido / Total_Notificacoes),4) * 100)
+
+# Juntar o total geral ao resultado
+tabela_final <- bind_rows(resultado, resultado_total)
+
+# tabela para aparecer no dashboard
+datatable(tabela_final,
+          options = list(pageLength = 20),
+          colnames = c("Mês/Ano", "Total Notificações-Sífilis Crianças < 1 ano", "Total de Notificações-Sífilis Gestantes", "Indicador 11 PQAVS (%)"),
+          rownames = FALSE)
+
+
+```
+
+
+
+### Série temporal do indicador 11 evolução mensal
+
+
+```{r}
+
+###### Obter o gráfico
+# Converter Mes_Ano em formato de data para ordenação correta no gráfico
+tabela_final_2<- tabela_final %>%
+  filter(Mes_Ano != "Total Geral") %>%  # Remover a linha do total geral para o gráfico
+  mutate(Mes_Ano = as.Date(paste0(Mes_Ano, "-01"), format = "%Y-%m-%d"))
+
+
+library(ggplot2)
+
+# Criar o gráfico com grade e eixo Y limitado de 0 a 50%
+grafico_evolucao <- ggplot(tabela_final_2, aes(x = Mes_Ano, y = Indicador)) +
+  geom_line(color = "darkblue", size = 1) +  # Linha de evolução
+  geom_point(color = "darkorange", size = 3) +  # Pontos nos meses
+  labs(
+    title = "Evolução Mensal do % de Casos de Sífilis Congênita  \n  Indicador 11-PQAVS ano 2022",
+    x = "Mês/Ano",
+    y = "Indicador 11 PQAVS (%)"
+  ) +
+  scale_x_date(
+    date_breaks = "1 month",  # Mostrar rótulos a cada mês
+    date_labels = "%b %Y"    # Formato: mês abreviado e ano (Ex.: Jan 2023)
+  ) +
+  scale_y_continuous(
+    limits = c(0, 50),       # Limitar eixo Y de 0 a 50%
+    breaks = seq(0, 50, 10), # Dividir o eixo Y de 10 em 10%
+    labels = function(x) paste0(x, "%")  # Adicionar o símbolo de % nos rótulos
+  ) +
+  theme_minimal() +  # Tema limpo
+  theme(
+    panel.grid.major = element_line(color = "gray", size = 0.5),  # Grade principal
+    panel.grid.minor = element_line(color = "lightgray", size = 0.25),  # Grade secundária
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotação dos rótulos do eixo X
+    plot.title = element_text(hjust = 0.5, face = "bold")  # Centralizar o título
+  )
+
+
+# Usando pacote {plotly} para tornar gráfico mais dinâmico
+ggplotly(grafico_evolucao)
+
+```
+
+
+### Distribuição geográfica interativa do resultado do Indicador 11
+
+```{r}
+
+library(shiny)
+### Aplicação em shiny do mapa interativo
+
+# UI (Interface do Usuário)
+ui <- fluidPage(
+  titlePanel("Mapeamento Interativo da Sífilis Congênita no Paraná"),
+  sidebarLayout(
+    sidebarPanel(
+      h4("Configurações do Mapa"),
+      selectInput("color_palette", "Selecione a Paleta de Cores:", 
+                  choices = rownames(brewer.pal.info), 
+                  selected = "Set3"),
+      sliderInput("breaks", "Número de Intervalos:", 
+                  min = 2, max = 6, value = 3),
+      actionButton("update", "Atualizar Mapa")
+    ),
+    mainPanel(
+      plotOutput("mapPlot"),
+      h4("Resumo do Indicador"),
+      tableOutput("summaryTable")
+    )
+  )
+)
+
+# Server (Lógica do Servidor)
+server <- function(input, output, session) {
+  
+  # Dados reativos para atualizar o mapa
+  reactive_data <- reactive({
+    # Dados processados no servidor
+    dados_final$Indicador_cat <- cut(
+      dados_final$Indicador,
+      breaks = input$breaks, 
+      include.lowest = TRUE
+    )
+    return(dados_final)
+  })
+  
+  # Renderizar o mapa
+  output$mapPlot <- renderPlot({
+    # Paleta de cores selecionada
+    colors <- brewer.pal(input$breaks, input$color_palette)
+    
+    ggplot(data = reactive_data()) +
+      geom_sf(aes(fill = Indicador_cat), color = "white") +
+      scale_fill_manual(
+        values = colors,
+        name = "Proporção de Casos de Sífilis Congênita"
+      ) +
+      labs(
+        title = "Mapa Interativo do Indicador 11- PQAVS- Sífilis Congênita",
+        subtitle = "Dados do Paraná"
+      ) +
+      theme_minimal()
+  })
+  
+  # Resumo em tabela
+  
+  output$summaryTable <- renderTable({
+    reactive_data() %>%
+      st_drop_geometry() %>%   # Remove a classe espacial
+      group_by(Indicador_cat) %>%
+      summarise(
+        Total_Municipios = n(),
+        Média = mean(Indicador, na.rm = TRUE),
+        Máximo = max(Indicador, na.rm = TRUE),
+        Mínimo = min(Indicador, na.rm = TRUE)
+      )
+  })
+  
+
+}
+
+
+
+# Run the application 
+shinyApp(ui = ui, server = server)
+
+
+```
+
+
+

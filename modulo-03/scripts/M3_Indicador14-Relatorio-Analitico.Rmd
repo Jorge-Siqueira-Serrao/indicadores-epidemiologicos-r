@@ -1,0 +1,304 @@
+---
+title: "Módulo 03- Relatório do Indicador 14 do PQAVS"
+author: "Profa. Dra. Elisângela Lizzi-Exemplo de Aula"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+# Carregar pacotes necessários
+library(dplyr)
+library(ggplot2)
+library(kableExtra)
+library(gt)
+library(rio)        
+library(tidyverse)  
+library(janitor)    
+library(lubridate)  
+```
+
+# Introdução
+
+O Programa de Qualificação da Ações de Vigilância em Saúde (PQA-VS) representa um marco para a Vigilância em Saúde por definir compromissos e responsabilidades para as três esferas de governo: a federal, com financiamento e apoio técnico, a estadual e a municipal, buscando induzir a implementação de iniciativas que garantam a melhoria das ações de vigilância em saúde. Assim, compõe o conjunto de iniciativas do Ministério da Saúde para o aperfeiçoamento do Sistema Único de Saúde (SUS), voltadas para a garantia do acesso integral a ações e serviços de qualidade, de forma oportuna, contribuindo para a melhoria das condições de saúde da população, para redução das iniquidades e para a promoção da qualidade de vida dos brasileiros.
+
+O Indicador 14 do PQAVS avalia a proporção de notificações de violência interpessoal e autoprovocada cujo campo raça/cor está preenchido com uma informação válida. Este relatório descreve a metodologia para o cálculo do indicador e apresenta os resultados obtidos para cada município.
+
+# Metodologia
+
+A metodologia utilizada segue os seguintes passos:
+
+1. Selecionar notificações relacionadas à violência interpessoal e autoprovocada (ID_Agravo = "Y09").
+2. Filtrar os casos com campo raça/cor preenchido como: Branca, Preta, Amarela, Parda ou Indígena.
+3. Calcular a proporção de notificações válidas em relação ao total de notificações por município e categoria de raça/cor.
+
+# Resultados
+
+## Cálculos Preliminares
+Obtêm-se os filtros e calculos preliminares do indicador.
+
+```{r data-preparation}
+
+setwd("D:/Arquivos - Códigos/R/R - 2º curso/3DADOS")
+
+nindinet <- import("NINDINET_PROFEPI.dbf")
+#names(nindinet) ### mostra os nomes das colunas
+#attach(nindinet) ## disponibiliza as colunas para manipulação
+
+
+# Exemplo de preparação de dados (ajuste conforme necessário com sua base de dados):
+# Supondo que você já tenha um dataframe chamado `dados` com as variáveis relevantes
+
+# Filtrar os casos de violência interpessoal e autoprovocada (ID_Agravo correspondente)
+dados_filtrados <- nindinet %>%
+  filter(ID_AGRAVO == "Y09")
+
+# Filtrar as notificações com raça/cor válida (categorias 1, 2, 3, 4, 5)
+dados_validos <- dados_filtrados %>%
+  filter(CS_RACA %in% c(1, 2, 3, 4, 5))
+
+# Contar total de notificações com raça/cor preenchido por município
+numerador <- dados_validos %>%
+  group_by(ID_MUNICIP) %>%
+  summarise(Total_Valido = n())
+
+# Contar total de notificações por município
+denominador <- dados_filtrados %>%
+  group_by(ID_MUNICIP) %>%
+  summarise(Total_Notificacoes = n())
+
+# Juntar os dados
+resultado <- left_join(numerador, denominador, by = "ID_MUNICIP")
+
+# Calcular o indicador por município
+resultado <- resultado %>%
+  mutate(Indicador = (Total_Valido / Total_Notificacoes) * 100)
+
+# Adicionar uma linha para o total geral
+resultado_total <- resultado %>%
+  summarise(ID_MUNICIP = "Total Geral",
+            Total_Valido = sum(Total_Valido, na.rm = TRUE),
+            Total_Notificacoes = sum(Total_Notificacoes, na.rm = TRUE),
+            Indicador = (Total_Valido / Total_Notificacoes) * 100)
+
+# Juntar o total geral ao resultado
+tabela_final <- bind_rows(resultado, resultado_total)
+
+## Tabela Geral por Município
+##A tabela abaixo apresenta o cálculo do indicador 14 por município:
+# Gerar tabela bonita em HTML
+tabela_indicador14 <- kable(tabela_final, format = "html", 
+                            col.names = c("Município", "Total Notificações Válidas", "Total de Notificações", "Indicador 14 PQAVS (%)"),
+                            digits = 2) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F) %>%
+  add_header_above(c(" " = 1, "Soma por Município" = 3))
+
+# Exibir tabela HTML
+tabela_indicador14
+
+```
+
+
+
+## Tabela por Raça/Cor
+A tabela a seguir apresenta o indicador por categorias de raça/cor:
+
+```{r data raca cor}
+#### Código usando pacote dplyr
+# Carregar pacotes necessários
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+# Filtrar os casos de violência interpessoal e autoprovocada (ID_Agravo correspondente)
+dados_filtrados <- nindinet %>%
+  filter(ID_AGRAVO == "Y09")
+
+# Filtrar as notificações com raça/cor válida (categorias 1, 2, 3, 4, 5)
+dados_validos <- dados_filtrados %>%
+  filter(CS_RACA %in% c(1, 2, 3, 4, 5))
+
+# Contar total de notificações com raça/cor preenchido por município e raça/cor
+numerador <- dados_validos %>%
+  group_by(ID_MUNICIP, CS_RACA) %>%
+  summarise(Total_Valido = n())
+
+# Contar total de notificações por município
+denominador <- dados_filtrados %>%
+  group_by(ID_MUNICIP) %>%
+  summarise(Total_Notificacoes = n())
+
+# Juntar os dados
+resultado <- left_join(numerador, denominador, by = "ID_MUNICIP")
+
+# Calcular o indicador por município e por raça/cor
+resultado <- resultado %>%
+  mutate(Indicador = (Total_Valido / Total_Notificacoes) * 100)
+
+# Adicionar uma linha para o total geral por raça/cor
+resultado_total <- resultado %>%
+  group_by(CS_RACA) %>%
+  summarise(ID_MUNICIP = "Total Geral",
+            Total_Valido = sum(Total_Valido, na.rm = TRUE),
+            Total_Notificacoes = sum(Total_Notificacoes, na.rm = TRUE),
+            Indicador = (Total_Valido / Total_Notificacoes) * 100)
+
+# Juntar o total geral ao resultado
+tabela_final <- bind_rows(resultado, resultado_total)
+
+# Gerar tabela bonita em HTML
+tabela_indicador_raca <- kable(tabela_final, format = "html", 
+                               col.names = c("Município", "Raça/Cor", "Total Notificações Válidas", "Total de Notificações", "Indicador (%)"),
+                               digits = 2) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F) %>%
+  add_header_above(c(" " = 1, "Soma por Município e Raça/Cor" = 4))
+
+# Exibir tabela HTML
+#tabela_indicador_raca
+
+############### tabela em html bonita#######
+# Carregar pacotes necessários
+library(dplyr)
+library(gt)
+
+# Aplicar o estilo com pacote {gt}
+tabela_id14_raca <- tabela_final %>%
+  gt() %>%
+  tab_header(
+    title = md("**Indicador de Notificações de Violência por Raça/Cor, Paraná, Brasil, 2022**")
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(everything())
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c("Total_Valido", "Total_Notificacoes", "Indicador")
+  ) %>%
+  cols_label(  # Define os rótulos das colunas
+    ID_MUNICIP = "Município",
+    Total_Valido = "Total Notificações Válidas",
+    Total_Notificacoes = "Total de Notificações",
+    Indicador = "Indicador 14 PQAVS (%)"
+  ) %>%
+  fmt_number(
+    columns = c("Total_Valido", "Total_Notificacoes", "Indicador"),
+    sep_mark = ".",
+    dec_mark = ",",
+    decimals = 1
+  ) %>%
+  tab_footnote(
+    footnote = "Nota: Indicador calculado como percentual de notificações válidas com raça/cor preenchida.",
+    locations = cells_title(groups = "title")
+  )
+
+# Exibir tabela formatada
+tabela_id14_raca
+```
+
+
+
+Na sequencia têm-se os gráficos do indicador por categorias de raça/cor:
+
+```{r data-preparation1}
+# Atribuir rotulos e contar as notificações por categoria
+resultado_geral <- table(dados_validos$CS_RACA)
+dados_validos$CS_RACA1 <- factor(dados_validos$CS_RACA, label = c("Branca", "Preta", "Amarela", "Parda","Indígena"))
+### criando uma tabela 
+raca.tb <- table(dados_validos$CS_RACA1 ) 
+## tabela de proporção
+prop.table(raca.tb)
+# Ordena e calcula a proporção dos valores
+raca_prop <- sort(prop.table(raca.tb))
+# Define as cores de cada categoria de forma personalizada
+cores <- c("gray20", "gray30","gray50","gray70","gray80")
+```
+
+
+##Gráfico customizado para raça/cor.
+```{r grafico-indicador1, fig.width=8, fig.height=5}
+barplot(raca_prop, 
+        border = "black", 
+        main = "Notificações de Violência  \n   Proporção por Raça/Cor \n Indicador 14/PQA-VS", 
+        ylim = c(0, 1), 
+        ylab = "Percentual (%)", 
+        xlab = "Raça/Cor", 
+        las = 1, 
+        col = cores, 
+        beside = T, # Mantém o layout empilhado
+        legend.text = TRUE, # Adiciona legenda com as categorias
+        args.legend = list(title = "Raça/Cor", x = "topleft", cex = 0.8))
+```
+
+
+```{r data-preparation3}
+# Filtrar os casos de violência interpessoal e autoprovocada (ID_Agravo correspondente)
+dados_filtrados <- nindinet %>%
+  filter(ID_AGRAVO == "Y09")
+
+# Filtrar as notificações com raça/cor válida (categorias 1, 2, 3, 4, 5)
+dados_validos <- dados_filtrados %>%
+  filter(CS_RACA %in% c(1, 2, 3, 4, 5))
+
+# Contar total de notificações com raça/cor preenchido por município e raça/cor
+numerador <- dados_validos %>%
+  group_by(ID_MUNICIP, CS_RACA) %>%
+  summarise(Total_Valido = n())
+
+# Contar total de notificações por município
+denominador <- dados_filtrados %>%
+  group_by(ID_MUNICIP) %>%
+  summarise(Total_Notificacoes = n())
+
+# Juntar os dados
+resultado <- left_join(numerador, denominador, by = "ID_MUNICIP")
+
+# Calcular o indicador por município e por raça/cor
+resultado <- resultado %>%
+  mutate(Indicador = (Total_Valido / Total_Notificacoes) * 100)
+
+# Adicionar uma linha para o total geral por raça/cor
+resultado_total <- resultado %>%
+  group_by(CS_RACA) %>%
+  summarise(ID_MUNICIP = "Total Geral",
+            Total_Valido = sum(Total_Valido, na.rm = TRUE),
+            Total_Notificacoes = sum(Total_Notificacoes, na.rm = TRUE),
+            Indicador = (Total_Valido / Total_Notificacoes) * 100)
+
+# Juntar o total geral ao resultado
+tabela_final <- bind_rows(resultado, resultado_total)
+```
+
+
+
+
+
+```{r grafico-indicador3, fig.width=8, fig.height=5}
+## rótulo y com números na horizontal, nomes dos rórulos de raça e título
+boxplot(tabela_final$Indicador ~ tabela_final$CS_RACA,
+        ylab = "Indicador 14 - PQAVS",
+        xlab = "Raça/Cor",
+        las = 1,
+        main = "Distribuição do Indicador 14 por Raça/Cor",
+        names = c("Branca", "Preta", "Amarela", "Parda", "Indígena"))
+```
+
+```{r grafico-indicador4, fig.width=8, fig.height=5}
+# personalizando os rótulos
+hist(tabela_final$Indicador,
+     ylab = "Frequencia (fi)",
+     xlab = "Indicador 14- PQAVS",
+     las = 1,
+     main = "Histograma da distribuição do Indicador 14 \n Municipios do Paraná",
+     col="lightblue", border="blue")
+```
+
+
+# Conclusão
+
+Os resultados apresentados indicam que a meta do Indicador 14 para os municípios analisados, obtendo a média do indicador `r mean(tabela_final$Indicador)` por cento. Recomenda-se que esforços sejam direcionados para melhorar o preenchimento do campo **raça/cor** em municípios com desempenho abaixo da meta estipulada.
+
+

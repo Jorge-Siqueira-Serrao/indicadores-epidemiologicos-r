@@ -1,0 +1,112 @@
+---
+title: "Mapa Interativo de Sorotipos de Dengue"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+runtime: shiny
+---
+```{r setup, include=FALSE}
+library(shiny)
+library(flexdashboard)
+library(tidyverse)
+library(sf)
+library(ggplot2)
+library(plotly)
+library(viridis)
+
+# Importação de dados (substituir pelos caminhos dos seus dados)
+
+dengue_sorotipos <- rio::import("F:/PROJETO_CURSO_R/Curso 2/Módulo 2/DADOS/sorotipos_denv_boletim.xlsx")
+
+mapa_estados <- st_read("F:/PROJETO_CURSO_R/Curso 2/Módulo 2/DADOS_GEOGRAFICOS/BR_UF_2022.shp")
+
+# Identificar os sorotipos mais frequentes por UF
+sorotipo_frequente <- dengue_sorotipos  |> 
+  group_by(UF) |>
+  filter(Amostras == max(Amostras))
+
+# Calcular a proporção de cada sorotipo em cada estado
+proporcao_sorotipos <- dengue_sorotipos |>
+  group_by(UF) |>
+  mutate(Total = sum(Amostras),
+         Proporcao = Amostras / Total)
+
+# Unir os sorotipos com o shapefile das UF
+sorotipos_estados <- left_join(mapa_estados,
+                               sorotipo_frequente,
+                               by = c("NM_UF" = "UF"))
+
+# Definir paleta de cores
+cores_sorotipos <- c("DENV-1" = "#e66101", 
+                     "DENV-2" = "#fdb863", 
+                     "DENV-3" = "#b2abd2", 
+                     "DENV-4" = "#5e3c99")
+```
+
+## Sidebar {.sidebar}
+
+```{r}
+selectInput("sorotipo", "Selecione o Sorotipo:", 
+            choices = c("Todos", unique(as.character(dengue_sorotipos$Sorotipo))), 
+            selected = "Todos")
+```
+
+## Mapa Interativo
+
+```{r}
+renderPlotly({
+  if (input$sorotipo == "Todos") {
+    # Mostra o mapa com os sorotipos predominantes
+    p <- ggplot(sorotipos_estados) +
+      geom_sf(aes(fill = Sorotipo, text = paste0(NM_UF,
+                                                 "<br>Sorotipo: ",
+                                                 Sorotipo, 
+                                                 "<br>Amostras: ",
+                                                 Amostras)),
+              color = "black", size = 0.3) +
+      scale_fill_manual(values = cores_sorotipos, na.value = "grey94") +
+      labs(title = "Sorotipo de Dengue mais Frequente por Estado",
+           fill = "Sorotipo Predominante") +
+      theme_minimal() +
+      theme(legend.position = "bottom",
+            legend.title = element_text(face = "bold"),
+            legend.text = element_text(size = 10),
+            plot.title = element_text(hjust = 0.5, face = "bold", size = 14))
+  } else {
+    # Filtra os dados para o sorotipo selecionado
+    dados_filtrados <- proporcao_sorotipos |>
+      filter(Sorotipo == input$sorotipo) |>
+      select(UF, Sorotipo, Amostras, Proporcao)
+    
+    # Une com o shapefile
+    dados_mapa <- left_join(mapa_estados, dados_filtrados, by = c("NM_UF" = "UF"))
+    
+    # Obtém a cor base do sorotipo selecionado
+    cor_base <- cores_sorotipos[input$sorotipo]
+    
+    # Cria um gradiente baseado na cor do sorotipo
+    p <- ggplot(dados_mapa) +
+      geom_sf(aes(fill = Proporcao, 
+                  text = paste0(NM_UF, "<br>",
+                                input$sorotipo, ": ", 
+                                round(Proporcao*100, 1), "%",
+                                "<br>Amostras: ", Amostras)),
+              color = "black", size = 0.3) +
+      scale_fill_gradientn(colors = c("white", cor_base),
+                         labels = scales::percent,
+                         na.value = "grey94") +
+      labs(title = paste("Proporção de", input$sorotipo, "por Estado"),
+           fill = paste("Proporção de", input$sorotipo)) +
+      theme_minimal() +
+      theme(legend.position = "bottom",
+            legend.title = element_text(face = "bold"),
+            legend.text = element_text(size = 10),
+            plot.title = element_text(hjust = 0.5, face = "bold", size = 14))
+  }
+  
+  ggplotly(p, tooltip = "text") |>
+    layout(legend = list(orientation = "h",
+                         y = -0.15))
+})
+```

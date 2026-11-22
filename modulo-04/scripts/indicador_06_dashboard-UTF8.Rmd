@@ -1,0 +1,218 @@
+---
+title: "Monitoramento Indicadores PQA-VS"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+# Carregando os pacotes
+library(flexdashboard) # Renderiza o dashboard
+library(sf)            # Manipula dados geográficos
+library(tidyverse)     # Manipula os dados
+library(plotly)        # Torna os gráficos interativos
+library(DT)            # Cria tabelas em HTML
+
+# Carregando as bases de dados
+
+dashboard_ind6 <- st_read("DADOS/m4_indicador6_pqavs.shp")
+
+```
+
+# Indicador 6 - PQA-VS
+
+Este painel é um produto do Curso Análise e Visualização de Dados com Software R aplicadas à Vigilância em Saúde e Ambiente, do Programa de Fortalecimento da Epidemiologia nos Serviços de Saúde - PROFEPI. Uma parceria do Ministério da Saúde, por meio da Secretaria de Vigilância em Saúde e Ambiente - SVSA e Organização Pan Americana da Saúde - OPAS. 
+
+## Rows
+
+
+### Meta Indicador 6
+
+```{r}
+# Cálculo da meta
+# Notificações encerradas oportunamente
+enc_oportuno <- sum(dashboard_ind6$encerr, na.rm = T)
+
+# Número de notificações imediatas
+not_imediatas <- sum(dashboard_ind6$notif, na.rm = T)
+
+# Meta indicador
+meta_pr <- enc_oportuno/not_imediatas * 100
+
+# Criação do medidor com gauge()
+
+gauge(meta_pr, min = 0, max = 100, symbol = '%',
+      gaugeSectors(success = c(80, 100),
+                   warning = c(60,79),
+                   danger = c(0,59)))
+
+```
+
+### Notificações imediatas
+
+```{r}
+# Definir a quantidade de notificações imediatas
+
+valueBox(not_imediatas,
+         icon = "fa-solid fa-magnifying-glass")
+
+```
+
+### Número de óbitos
+
+```{r}
+
+obitos <- sum(dashboard_ind6$obitos, na.rm = T)
+
+valueBox(obitos,
+         icon = "fa-solid fa-cross" )
+
+
+```
+
+### Municípios com notificação
+
+```{r}
+
+mun_notificacao <- dashboard_ind6 |>
+                   filter(!is.na(notif)) |> 
+                   nrow()
+
+valueBox(mun_notificacao,
+         icon = "fa-solid fa-building-flag")
+
+```
+
+
+## Rows {.tabset .tabset-fade}
+
+
+Navegue pelas abas abaixo para ver o resultado por Macrorregião ou por Regional de Saúde
+
+### Resultado do Indicador 6 por Macrorregião e Regional de Saúde
+
+```{r}
+
+ind6_macro <- dashboard_ind6 |>
+             group_by(macro) |>
+             summarise(notificacoes = sum(notif, na.rm = T),
+                       encerr_oportun = sum (encerr, na.rm = T),
+                       resultado = round(encerr_oportun / notificacoes *100, 2))
+
+macro_ind6 <- ggplot(ind6_macro,    # Fonte de dados
+       aes(x = macro,                # Variável do eixo X (macorregiões)
+           y = resultado,           # Variável do eixo Y (valores da variável)
+           fill = macro)) +          # Cores para as macrorregionais
+  
+  geom_bar(                          # Define a geometria de barra (geom_bar)
+           stat = "identity",        # Usa os valores da variável para a barra
+           width = 0.6,              # Define a largura da barras (60%)
+           color = "black") +        # Define o contorno das barras
+  
+  geom_hline(                        # Adiciona a linha da meta
+             yintercept = 80,        # Posiciona a linha em 80 (meta)
+             linetype = "dashed",    # Define a linha como pontilhada
+             color = "darkblue",          # Define a cor da linha
+             linewidth = 0.5) +        # Define a espessura da linha
+  
+  annotate(                          # Adiciona uma anotação no gráfico (Meta)
+           "text",                   # Define que a anotação será um texto
+           x = 4.5,                  # Posição do texto, próximo ao fim de X
+           y = 85,                   # Posição do texto em Y, sobre a linha
+           label = "80%",            # Define o texto da anotação  
+           color = "darkblue",          # Cor do texto
+           hjust = 1,                # Alinha texto à direita
+           
+           size = 5) +               # Tamanho da fonte
+  
+  labs(                              # Define o título e rótulos do gráfico
+       title = "Desempenho por Macroregião, Indicador 6 - PQA-VS, PR, 2022",
+       x = "Macroregião",            # Rótulo dos eixos X e Y
+       y = "% encerradas oportunamente",
+       fill = "Macrorregiões") +
+  scale_fill_manual(                 # Define manualmente as cores das colunas
+                                     # Define as cores das macrorregiões
+                    values = c("Norte"    = "#a6cee3",      
+                               "Oeste"    = "#1f78b4", 
+                               "Noroeste" = "#b2df8a", 
+                               "Leste"    = "#33a02c")) +
+  
+  theme_minimal() +                  # Aplica o tema minimalista
+  
+  theme(legend.position = "none")    # Oculta a legenda do gráfico
+
+# Usando pacote {plotly} para tornar gráfico mais dinâmico
+
+ggplotly(macro_ind6)
+
+```
+
+### Distribuição geográfica do resultado do Indicador 6
+
+```{r}
+
+# Agrupando dados por regional de saúde
+
+ind6_regional <- dashboard_ind6 |>
+             group_by(nm_regiona) |>
+             summarise(notificacoes = sum(notif, na.rm = T),
+                       encerr_oportun = sum (encerr, na.rm = T),
+                       resultado = round(encerr_oportun / notificacoes *100, 2))
+
+# Ajustando as geometrias, antes de plotar o gráfico com {ggplot2}
+
+ind6_regional <- st_cast(ind6_regional, "MULTIPOLYGON", warn = FALSE)
+
+# Criando um mapa por Regional de saúde
+
+mapa_ind6 <- ggplot(ind6_regional) +
+  aes(fill = resultado) +
+  geom_sf(aes(text = paste(nm_regiona, "<br>",
+                           resultado))) +
+  scale_fill_continuous() +
+  labs(
+    title = "Indicador 6 do PQA-VS por regionais de saúde.",
+    fill = "Indicador 6 - PQA-VS"
+  ) +
+  theme_minimal() 
+
+
+
+ggplotly(mapa_ind6, tooltip = "text")
+
+
+```
+
+
+
+## Rows
+
+
+### Resultado do Indicador 6 do PQA-VS por município
+
+Acompanhe o resultado do Indicador 6 do PQA-VS por município. Use a ferramenta de busca da tabela para filtrar por município, ou Regional de Saúde
+
+```{r}
+
+# Criando uma tabel com o resultado por município
+
+tabela_municipios <- dashboard_ind6 |>
+                     as.data.frame() |> # elimina a coluna geometry
+                     replace_na(list(notif = 0, encerr = 0)) |> # Substitui NA
+                     select(nm_mun, nm_regiona, notif, encerr) |>
+                     mutate(resultado = if_else(notif == 0 & encerr == 0,
+                                                "Sem notificações",
+                    as.character(round(encerr/notif * 100, 2)))) # Torna tudo caracter
+
+datatable(tabela_municipios,
+          options = list(pageLength = 20),
+          colnames = c("Município", "Regional de saúde",
+                       "Notificações", "Encerradas oportunamente",
+                       "Resultado do indicador"),
+          rownames = FALSE)
+
+```
+

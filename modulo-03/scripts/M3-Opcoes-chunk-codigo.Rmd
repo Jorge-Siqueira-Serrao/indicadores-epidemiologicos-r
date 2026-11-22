@@ -1,0 +1,125 @@
+---
+title: "Exemplos de Opções de Chunk em R Markdown"
+author: "Profa. Dra. Elisangela Lizzi"
+date: "2025-01-16"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+Aqui está um exemplo de código **R Markdown** com as opções mencionadas e explicações sobre o que cada uma faz:
+
+
+
+# Exemplo 1: echo = FALSE
+
+O código será **executado**, mas não será exibido no documento.
+
+```{r echo=FALSE}
+# Este código será executado, mas não aparecerá no documento final
+print("Este código não será mostrado no relatório, mas a saída será.")
+```
+
+# Exemplo 2: include = FALSE
+
+O **código** e a **saída** serão completamente **ignorados**.
+
+```{r include=FALSE}
+# Este código não será executado, nem exibido no documento final
+print("Este código não será nem exibido, nem executado.")
+```
+
+# Exemplo 3: eval = FALSE
+O código **não será executado**, mas será **mostrado** no documento.
+
+```{r eval=FALSE}
+# Este código será mostrado no relatório, mas não será executado
+print("Este código será visível, mas não será executado.")
+```
+
+# Exemplo 4: results = 'hide'
+Os **resultados** do código não serão exibidos no relatório, mas o **código será executado**.
+
+```{r results='hide'}
+# O código será executado, mas os resultados não aparecerão no relatório
+print("Os resultados não aparecerão, mas o código será executado.")
+```
+
+# Exemplo 5: message = FALSE
+As **mensagens** geradas pelo código não serão exibidas no relatório.
+
+```{r message=FALSE}
+# As mensagens de aviso não aparecerão no documento
+library(ggplot2)  # Se houver mensagens de carregamento, elas serão ocultadas
+print("Mensagem será oculta.")
+```
+
+# Exemplo 6: warning = FALSE
+Os **avisos** gerados pelo código não serão exibidos no relatório.
+
+```{r warning=FALSE}
+# Os avisos não aparecerão no documento final
+log(-1)  # Gera um aviso de que NaN foi produzido
+```
+
+# Exemplo 7: error = TRUE
+Se ocorrer um **erro** no código, ele será **exibido** no relatório.
+
+```{r error=TRUE}
+# O erro será exibido no documento, sem interromper a execução
+stop("Este é um erro que será mostrado no relatório.")
+```
+
+# Exemplo 8: fig.width e fig.height
+Você pode definir o **tamanho da figura** gerada no relatório.
+
+```{r fig.width=8, fig.height=6}
+# Definindo o tamanho da figura
+plot(rnorm(100), rnorm(100))
+```
+
+# Exemplo 9: out.width
+
+Aqui, o **tamanho da figura** no documento é ajustado.
+
+```{r out.width='50%'}
+# Ajustando o tamanho da figura no relatório
+plot(rnorm(100), rnorm(100))
+```
+
+# Exemplo 10: cache = TRUE
+
+O **cache** permitirá que o código não seja reexecutado toda vez que você gerar o relatório.
+
+```{r cache=TRUE}
+# Este código será armazenado em cache e não será reexecutado em futuras execuções
+Sys.sleep(5)  # Este código simula um tempo de execução
+```
+
+---
+Cada exemplo demonstra o uso de uma ou mais opções de chunk para controlar a forma como o código e os resultados são exibidos no relatório final.
+
+```
+
+### Como funciona:
+1. **`echo=FALSE`**: O código não aparece, mas a saída é exibida.
+2. **`include=FALSE`**: Nem o código nem a saída são incluídos no relatório.
+3. **`eval=FALSE`**: O código não é executado, mas aparece no relatório.
+4. **`results='hide'`**: O código é executado, mas seus resultados não aparecem.
+5. **`message=FALSE`**: Mensagens (como as de carregamento de pacotes) são ocultadas.
+6. **`warning=FALSE`**: Avisos gerados pelo código são ocultados.
+7. **`error=TRUE`**: Erros são exibidos no relatório, permitindo que o processo não seja interrompido.
+8. **`fig.width` e `fig.height`**: Permite definir o tamanho das figuras geradas.
+9. **`out.width`**: Ajusta o tamanho da figura no relatório, independentemente de seu tamanho real.
+10. **`cache=TRUE`**: Habilita o cache, o que significa que o código não será reexecutado em execuções futuras.
+

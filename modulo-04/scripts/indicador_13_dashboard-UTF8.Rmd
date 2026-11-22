@@ -1,0 +1,258 @@
+---
+title: "Monitoramento Indicadores PQA-VS"
+author: "| Departamento de Vigilância em Saúde e Ambiente"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+logo: "IMAGENS/logo_profepi.png"
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(sf)
+library(tidyverse)
+library(plotly)
+library(DT)
+
+# Carregando as bases de dados
+
+dashboard_ind13 <- st_read("DADOS/m4_indicador13_pqavs.shp")
+
+
+
+```
+
+# Indicador 13 - PQA-VS
+
+<font size="4">Este painel é um produto do **Curso Análise e Visualização de Dados com Software R aplicadas à Vigilância em Saúde e Ambiente**, do Programa de Fortalecimento da Epidemiologia nos Serviços de Saúde - PROFEPI. Uma parceria do Ministério da Saúde, por meio da Secretaria de Vigilância em Saúde e Ambiente - SVSA e Organização Pan Americana da Saúde - OPAS.</font>
+
+## Row {data-height=60}
+
+### <font size="4">**Indicador 13 | PQA-VS | Paraná | 2022**</font>
+
+**Definição do indicador:** Proporção de preenchimento dos campos “Ocupação” e “Atividade Econômica (CNAE)” nas notificações de acidente de trabalho, acidente de trabalho com exposição a material biológico e intoxicação exógena segundo município de notificação. Para mais informações sobre o Programa de Qualificação das Ações de Vigilância em Saúde (PQA-VS), acesse [o site do programa.](https://www.gov.br/saude/pt-br/acesso-a-informacao/acoes-e-programas/pqa-vs "Link site do PQA-VS")
+
+## Row {data-height="130"}
+
+### Meta indicador 13
+
+```{r}
+# Cálculo da meta
+# Notificações com CBO Ok
+cbo_ok <- sum(dashboard_ind13$cbo_ok, na.rm = T)
+
+# Notificações com CNAE Ok
+cnae_ok <- sum(dashboard_ind13$cnae_ok, na.rm = T)
+
+# Total de notificações
+
+notificacoes <- sum(dashboard_ind13$notif, na.rm = T)
+
+# Cálculo Passo 1
+
+prop_cbo <- cbo_ok/notificacoes
+
+# Cálculo Passo 2
+
+prop_cnae <- cnae_ok/notificacoes
+
+# Indicador 13
+
+indicador13 <- (prop_cbo + prop_cnae)/2 * 100
+
+# Criação do medidor com gauge()
+
+gauge(indicador13, min = 0, max = 100, symbol = '%',
+      gaugeSectors(success = c(60, 100), warning = c(40,59), danger = c(0,39)))
+
+
+```
+
+### Número de notificações
+
+```{r}
+
+valueBox(notificacoes,
+         icon = "fa-solid fa-magnifying-glass")
+
+```
+
+
+### Municípios com notificação
+
+```{r}
+
+municipio_not <- nrow(dashboard_ind13)
+
+valueBox(municipio_not,
+         icon = "fa-solid fa-building-flag")
+
+```
+
+
+### Municípios na meta
+
+```{r}
+
+municipio_meta <- dashboard_ind13 |> 
+                  filter(ind13 >= 60) |>
+                  nrow()
+
+valueBox(municipio_meta,
+         icon = "fa-solid fa-check",
+         color = "#08519c")
+
+```
+
+
+### Municípios abaixo da meta
+
+```{r}
+
+municipio_abaixo <- dashboard_ind13 |> 
+                  filter(ind13 < 60) |>
+                  nrow()
+
+valueBox(municipio_abaixo,
+         icon = "fa-solid fa-circle-xmark",
+         color = "#e34a33")
+
+```
+
+
+## Row
+
+### <font size="4">**Desempenho por Regionais de Saúde**</font>
+
+```{r}
+
+# Agregando os dados por regionais de saúde
+
+mapa_regionais <- dashboard_ind13  |> 
+                  group_by(nm_regiona)  |> 
+                  summarize(geometry = st_union(geometry), # União de geometrias
+                            notificacoes = sum(notif),
+                            cbo_ok_rs = sum(cbo_ok),
+                            cnae_ok_rs = sum(cnae_ok),
+                            ind13 = round(((cbo_ok_rs/notificacoes) +
+                                    (cnae_ok_rs/notificacoes))/2 * 100, 2))
+
+# Ajustando as geometrias, antes de plotar o gráfico com {ggplot2}
+
+mapa_regionais <- st_cast(mapa_regionais, "MULTIPOLYGON", warn = FALSE)
+
+# Criando o mapa com {ggplot2}
+
+mapa_rs <- ggplot(data = mapa_regionais,
+                  aes(fill = ind13,
+                      text = paste("Regional:", nm_regiona,
+                                   "<br>Resultado:", ind13))) +
+            geom_sf() +
+            theme_minimal()+
+            labs(fill = "Indicador 13") +
+            theme(
+              legend.position = "bottom",
+              legend.justification = "bottom",
+              legend.title = element_text(face = "bold",
+                                          size = 12L)) +
+            guides(
+              fill = guide_colorbar(
+                title.position = "top",     # Título da legenda na parte superior
+                title.hjust = 0.5,          # Centralizar o título
+                barwidth = 20,              # Largura da barra
+                barheight = 1,              # Altura da barra
+                ticks = TRUE))
+
+
+ggplotly(mapa_rs, tooltip = "text")
+
+```
+
+### <font size="4">**Desempenho por Macrorregiões de saúde**</font>
+
+```{r}
+
+# Criar uma tabela resumida por macrorregião de saúde
+
+tabela_macro <- dashboard_ind13 |> 
+                as.data.frame() |> # remove as geometrias
+                group_by(macro) |>
+                summarise(notificacoes = sum(notif),
+                          cbo_ok_mr = sum(cbo_ok),
+                            cnae_ok_mr = sum(cnae_ok),
+                            ind13 = round(((cbo_ok_mr/notificacoes) +
+                                    (cnae_ok_mr/notificacoes))/2 * 100, 2))
+
+# Seleciona apenas a variáveis que serão exibidas
+
+tabela_exibicao <- tabela_macro |>
+                   select(macro, notificacoes, ind13)
+
+# Cria uma coluna com conteúdo html para visualização
+
+tabela_exibicao <- tabela_exibicao |>
+                mutate(barra_html = paste0(
+                  '<div style="background-color: #ddd; width: 100%; height: 20px;">',
+                  '<div style="background-color: #007bff; width: ',
+                  ind13, '%; height: 100%;"></div>',
+                  '</div>'
+                ))
+
+# Cria a tabela com DT para a exibição por macrorregionais
+
+# Criando a tabela com DT
+datatable(
+  tabela_exibicao, # Fonte de dados
+  escape = FALSE, # Permite interpretar HTML na tabela
+  rownames = FALSE, # Remove o nome das linhas
+  options = list(
+    pageLength = 5,          # Número de linhas por página
+    dom = "tpi",             # Exibe tabela, busca e paginação
+    columnDefs = list(
+      list(targets = 0, width = "75px"), # Ajusta a largura
+      list(targets = 1, width = "75px", className = 'dt-center'), # centraliza 
+      list(targets = 2, width = "75px", className = 'dt-center'), # centraliza
+      list(targets = 3, width = "100px") # Ajusta a largura
+    )
+  ),
+  colnames = c("Macrorregional", "Notificações",
+               "Indicador 13 (%)", "Resultado")
+)
+
+
+```
+
+## Row 
+
+### <font size="4">**Detalhamento do Indicador 13 por município**</font>
+
+```{r}
+
+# Cria uma tabela por município
+
+tabela_mun_ind13 <- dashboard_ind13 |>
+                    as.data.frame() |>
+                    select(-geometry) |>
+                    mutate(ind13 = round(ind13, 2))
+                    
+
+datatable(
+  tabela_mun_ind13,
+  options = list(
+    pageLength = 20,        # Número de linhas por página
+    dom = "tpi",            # Exibe apenas tabela, busca geral e paginação
+    autoWidth = TRUE       # Ajusta a largura automaticamente
+    ),
+  rownames = FALSE,
+  filter = "top",          # Adiciona caixas de busca no topo de cada coluna
+  colnames = c("Município", "Regional de saúde", 
+               "Macrorregião", "Notificações",
+               "CBO adequado", "CNAE adequado",
+               "Resultado indicador", "Alcance da meta"))
+               
+
+
+
+```
+

@@ -1,0 +1,1150 @@
+---
+title: "Monitoramento Indicadores PQA-VS"
+author: "| Departamento de Vigilância em Saúde e Ambiente"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+logo: "IMAGENS/logo_profepi.png"
+---
+
+
+
+
+
+```{r setup, include=FALSE}
+###------------------------ indicador 06  ------------------------####
+library(flexdashboard)
+library(sf)
+library(tidyverse)
+library(plotly)
+library(DT)
+
+# Carregando as bases de dados
+
+dashboard_ind6 <- st_read("DADOS/m4_indicador6_pqavs.shp")
+
+dashboard_ind13 <- st_read("DADOS/m4_indicador13_pqavs.shp")
+
+
+```
+
+# Indicador 6 - PQA-VS
+
+Este painel é um produto do Curso Análise e Visualização de Dados com Software R aplicadas à Vigilância em Saúde e Ambiente, do Programa de Fortalecimento da Epidemiologia nos Serviços de Saúde - PROFEPI. Uma parceria do Ministério da Saúde, por meio da Secretaria de Vigilância em Saúde e Ambiente - SVSA e Organização Pan Americana da Saúde - OPAS. 
+
+Rows
+-----------------------------------------------------------------------
+
+### Meta Indicador 6
+
+```{r}
+# Cálculo da meta
+# Notificações encerradas oportunamente
+enc_oportuno <- sum(dashboard_ind6$encerr, na.rm = T)
+
+# Número de notificações imediatas
+not_imediatas <- sum(dashboard_ind6$notif, na.rm = T)
+
+# Meta indicador
+meta_pr <- enc_oportuno/not_imediatas * 100
+
+# Criação do medidor com gauge()
+
+gauge(meta_pr, min = 0, max = 100, symbol = '%',
+      gaugeSectors(success = c(80, 100), warning = c(60,79), danger = c(0,59)))
+
+```
+
+### Notificações imediatas
+
+```{r}
+# Definir a quantidade de notificações imediatas
+
+valueBox(not_imediatas,
+         icon = "fa-solid fa-magnifying-glass")
+
+```
+
+### Número de óbitos
+
+```{r}
+
+obitos <- sum(dashboard_ind6$obitos, na.rm = T)
+
+valueBox(obitos,
+         icon = "fa-solid fa-cross" )
+
+
+```
+
+### Municípios com notificação
+
+```{r}
+
+mun_notificacao <- dashboard_ind6 |>
+                   filter(!is.na(notif)) |> 
+                   nrow()
+
+valueBox(mun_notificacao,
+         icon = "fa-solid fa-building-flag")
+
+```
+
+
+Rows {.tabset .tabset-fade}
+-----------------------------------------------------------------------
+
+Navegue pelas abas abaixo para ver o resultado por Macrorregião ou por Regional de Saúde
+
+### Resultado do Indicador 6 por Macrorregião e Regional de Saúde
+
+```{r}
+
+ind6_macro <- dashboard_ind6 |>
+             group_by(macro) |>
+             summarise(notificacoes = sum(notif, na.rm = T),
+                       encerr_oportun = sum (encerr, na.rm = T),
+                       resultado = round(encerr_oportun / notificacoes *100, 2))
+
+macro_ind6 <- ggplot(ind6_macro,    # Fonte de dados
+       aes(x = macro,                # Variável do eixo X (macorregiões)
+           y = resultado,                # Variável do eixo Y (valores da variável)
+           fill = macro)) +          # Cores para as macrorregionais
+  
+  geom_bar(                          # Define a geometria de barra (geom_bar)
+           stat = "identity",        # Usa os valores da variável para a barra
+           width = 0.6,              # Define a largura da barras (60%)
+           color = "black") +        # Define o contorno das barras
+  
+  geom_hline(                        # Adiciona a linha da meta
+             yintercept = 80,        # Posiciona a linha em 60 (meta)
+             linetype = "dashed",    # Define a linha como pontilhada
+             color = "darkblue",          # Define a cor da linha
+             linewidth = 0.5) +        # Define a espessura da linha
+  
+  annotate(                          # Adiciona uma anotação no gráfico (Meta)
+           "text",                   # Define que a anotação será um texto
+           x = 4.5,                  # Posição do texto, próximo ao fim de X
+           y = 85,                   # Posição do texto em Y, sobre a linha
+           label = "80%",            # Define o texto da anotação  
+           color = "darkblue",          # Cor do texto
+           hjust = 1,                # Alinha texto à direita
+           
+           size = 5) +               # Tamanho da fonte
+  
+  labs(                              # Define o título e rótulos do gráfico
+       title = "Desempenho por Macroregião, Indicador 6 - PQA-VS, PR, 2022",
+       x = "Macroregião",            # Rótulo dos eixos X e Y
+       y = "% encerradas oportunamente",
+       fill = "Macrorregiões") +
+  scale_fill_manual(                 # Define manualmente as cores das colunas
+                                     # Define as cores das macrorregiões
+                    values = c("Norte"    = "#a6cee3",      
+                               "Oeste"    = "#1f78b4", 
+                               "Noroeste" = "#b2df8a", 
+                               "Leste"    = "#33a02c")) +
+  
+  theme_minimal() +                  # Aplica o tema minimalista
+  
+  theme(legend.position = "none")    # Oculta a legenda do gráfico
+
+# Usando pacote {plotly} para tornar gráfico mais dinâmico
+
+ggplotly(macro_ind6)
+
+```
+
+### Distribuição geográfica do resultado do Indicador 6
+
+```{r}
+
+# Agrupando dados por regional de saúde
+
+ind6_regional <- dashboard_ind6 |>
+             group_by(nm_regiona) |>
+             summarise(notificacoes = sum(notif, na.rm = T),
+                       encerr_oportun = sum (encerr, na.rm = T),
+                       resultado = round(encerr_oportun / notificacoes *100, 2))
+
+# Ajustando as geometrias, antes de plotar o gráfico com {ggplot2}
+
+ind6_regional <- st_cast(ind6_regional, "MULTIPOLYGON", warn = FALSE)
+
+# Criando um mapa por Regional de saúde
+
+mapa_ind6 <- ggplot(ind6_regional) +
+  aes(fill = resultado) +
+  geom_sf(aes(text = paste(nm_regiona, "<br>",
+                           resultado))) +
+  scale_fill_continuous() +
+  labs(
+    title = "Indicador 6 do PQA-VS por regionais de saúde.",
+    fill = "Indicador 6 - PQA-VS"
+  ) +
+  theme_minimal() 
+
+
+
+ggplotly(mapa_ind6, tooltip = "text")
+
+
+```
+
+
+
+Rows
+-----------------------------------------------------------------------
+
+
+### Resultado do Indicador 6 do PQA-VS por município
+
+Acompanhe o resultado do Indicador 6 do PQA-VS por município. Use a ferramenta de busca da tabela para filtrar por município, ou Regional de Saúde
+
+```{r}
+
+# Criando uma tabel com o resultado por município
+
+tabela_municipios <- dashboard_ind6 |>
+                     as.data.frame() |> # elimina a coluna geometry
+                     replace_na(list(notif = 0, encerr = 0)) |> # Substitui os NA
+                     select(nm_mun, nm_regiona, notif, encerr) |>
+                     mutate(resultado = if_else(notif == 0 & encerr == 0,
+                                                "Sem notificações",
+                       as.character(round(encerr/notif * 100, 2)))) # Torna tudo caracter
+
+datatable(tabela_municipios,
+          options = list(pageLength = 20) )
+###----------------------------- fim do  indicador 06  -------------------------####
+
+
+```
+
+
+
+
+
+```{r setup3, include=FALSE}
+###------------------------ inicio do indicador 11 [daqui pra baixo ] ------------------------####
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+# Carregar pacotes necessários
+library(flexdashboard)
+library(shiny)
+library(sf)
+library(tidyverse)
+library(DT)
+library(plotly)
+library(lubridate)
+library(rio)
+library(janitor)
+library(kableExtra)
+library(gt)
+library(leaflet)
+library(RColorBrewer)
+
+# Definindo a pasta de trabalho
+setwd("/Users/elisangelalizzi/Documents/OPAS- Ministério da Saúde/Curso - R para vigilância em Saúde - Nível 02/Produção de conteúdo/Dados")
+
+# Carregar os dados
+nindinet <- import("NINDINET_PROFEPI.dbf")
+municipios <- import("MUNICNET.dbf")
+pr <- st_read("PR_Municipios_2022.shp")
+
+# Dados iniciais para pré processamento do indicador
+dados_filtradosn <- nindinet %>%
+  filter(ID_AGRAVO == "A509", !grepl("^4", NU_IDADE_N))
+
+dados_filtradosd <- nindinet %>%
+  filter(ID_AGRAVO == "O981")
+
+numerador <- dados_filtradosn %>%
+  group_by(ID_MUNICIP) %>%
+  summarise(Total_Valido = n())
+
+denominador <- dados_filtradosd %>%
+  group_by(ID_MUNICIP) %>%
+  summarise(Total_Notificacoes = n())
+
+resultado <- left_join(numerador, denominador, by = "ID_MUNICIP") %>%
+  mutate(Indicador = round((Total_Valido / Total_Notificacoes), 4) * 100)
+
+# Adicionar os nomes dos municípios (vinculando com a tabela `municipios`)
+tabela_final <- resultado %>%
+  left_join(municipios %>% select(ID_MUNICIP, NM_MUNICIP), by = "ID_MUNICIP")
+
+# Reordenar as colunas para exibir o nome dos municípios primeiro (opcional)
+tabela_final <- tabela_final %>%
+  select(NM_MUNICIP, everything())
+
+### No shapefile atenção para o número de digitos do código.
+## Fazendo a conversão ###
+# Converter coluna ID_MUNICIP para o mesmo tipo do banco de dados
+# Converter CD_MUN para caracteres e criar ID_MUNICIP com os primeiros 6 dígitos
+pr$ID_MUNICIP <- substr(as.character(pr$CD_MUN), 1, 6)
+municipios$ID_MUNICIP <- as.character(municipios$ID_MUNICIP)
+
+## Nos dados de municipios filtrar somente paraná
+dados_pr<- subset(municipios, UF_IBGE == "41")
+
+
+# Fazer o linkage dos dados por código do municipio
+dados_pr2=left_join(dados_pr,tabela_final, by="ID_MUNICIP")
+
+# Substituir valores NA por 0 (obs:caso haja municípios sem notificações válidas ou totais)
+# Em caso de análises mais robustas fazer imputação de dados por métodos especificos
+summary(dados_pr2$Indicador)
+
+
+# Fazer o linkage dos dados
+dados_final=merge(pr,dados_pr2, by="ID_MUNICIP",sort=FALSE)
+
+
+### Abaixo código em CSS, suportado pelo shiny para adicionar barras de rolagens nas páginas individuais
+
+```
+
+<style>
+/* Adiciona barra de rolagem geral ao conteúdo */
+.main-container {
+  overflow-y: auto;
+  height: 100vh;
+  padding: 10px;
+}
+
+/* Adiciona barra de rolagem nas abas */
+.tab-content {
+  overflow-y: auto;
+  max-height: calc(100vh - 120px);
+}
+
+/* Estiliza a barra de rolagem (opcional) */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #888;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #555;
+}
+</style>
+
+
+
+
+
+# Indicador 11 - PQA-VS
+
+Este painel é um produto do Curso Análise e Visualização de Dados com Software R aplicadas à Vigilância em Saúde e Ambiente, do Programa de Fortalecimento da Epidemiologia nos Serviços de Saúde - PROFEPI. Uma parceria do Ministério da Saúde, por meio da Secretaria de Vigilância em Saúde e Ambiente - SVSA e Organização Pan Americana da Saúde - OPAS. 
+
+Rows
+-----------------------------------------------------------------------
+
+### Meta Indicador 11
+
+```{r}
+# Cálculo da meta
+# Total Notificações-Sífilis Crianças < 1 ano
+numerador1 <- sum(tabela_final$Total_Valido, na.rm=T)
+
+# Total de Notificações-Sífilis Gestantes
+denominador1 <-sum(tabela_final$Total_Notificacoes, na.rm=T)
+
+# Meta indicador
+meta_pr <- (numerador1/denominador1)*100
+
+
+# Criação do medidor com gauge()
+
+gauge(meta_pr, min = 0, max = 100, symbol = '%',
+      gaugeSectors(success = c(0, 9), warning = c(10,39), danger = c(40,100)))
+
+```
+
+### Notificações do total de Sífilis Crianças < 1 ano
+
+```{r}
+# Total Notificações-Sífilis Crianças < 1 ano
+numerador <- sum(tabela_final$Total_Valido, na.rm = T)
+valueBox(numerador, icon = "fa-solid fa-child")
+
+```
+
+### Notificações do total de Sífilis Gestantes
+
+```{r}
+
+# Total de Notificações-Sífilis Gestantes
+denominador <- sum(tabela_final$Total_Notificacoes , na.rm = T)
+valueBox(denominador,icon = "fa-solid fa-person-pregnant")
+
+```
+
+### Número de municípios com notificação
+
+```{r}
+
+
+mun_notificacao <- tabela_final |>
+                  filter(!is.na(Indicador)) |> 
+                  nrow()
+
+valueBox(mun_notificacao,
+        icon = "fa-solid fa-city")
+
+```
+
+
+Rows {.tabset .tabset-fade}
+-----------------------------------------------------------------------
+
+Navegue pelas abas abaixo para ver o resultado por Municipio e a evolução temporal.
+
+### Resultado do Indicador 11 por município
+
+```{r}
+
+# Criando uma tabela com o resultado por município
+
+datatable(tabela_final , options = list(pageLength = 10),
+          colnames = c("Nome do Município","Código Município", "Notificações < 1 ano", 
+                       "Notificações Gestantes", "Indicador (%)"))
+
+```
+
+
+
+
+
+
+
+
+
+### Resultado do indicador 11 evolução mensal
+```{r}
+
+nindinet <- nindinet %>%
+  mutate(Mes_Ano = format(as.Date(DT_NOTIFIC), "%Y-%m"))
+
+# Filtrar os casos para o numerador: sífilis congênita em crianças menores de 1 ano
+dados_filtradosn <- nindinet %>%
+  filter(ID_AGRAVO == "A509", !grepl("^4", NU_IDADE_N))
+
+# Filtrar os casos para o denominador: sífilis em gestantes
+dados_filtradosd <- nindinet %>%
+  filter(ID_AGRAVO == "O981")
+# Contar total de notificações para o numerador por mês
+numerador <- dados_filtradosn %>%
+  group_by(Mes_Ano) %>%
+  summarise(Total_Valido = n(), .groups = "drop")
+
+# Contar total de notificações para o denominador por mês
+denominador <- dados_filtradosd %>%
+  group_by(Mes_Ano) %>%
+  summarise(Total_Notificacoes = n(), .groups = "drop")
+# Juntar os dados do numerador e denominador
+resultado <- left_join(numerador, denominador, by = "Mes_Ano")
+
+# Calcular o indicador por mês
+resultado <- resultado %>%
+  mutate(Indicador = round((Total_Valido / Total_Notificacoes),4) * 100)
+
+# Adicionar uma linha para o total geral
+resultado_total <- resultado %>%
+  summarise(Mes_Ano = "Total Geral",
+            Total_Valido = sum(Total_Valido, na.rm = TRUE),
+            Total_Notificacoes = sum(Total_Notificacoes, na.rm = TRUE),
+            Indicador = round((Total_Valido / Total_Notificacoes),4) * 100)
+
+# Juntar o total geral ao resultado
+tabela_final <- bind_rows(resultado, resultado_total)
+
+# tabela para aparecer no dashboard
+datatable(tabela_final,
+          options = list(pageLength = 20),
+          colnames = c("Mês/Ano", "Total Notificações-Sífilis Crianças < 1 ano", "Total de Notificações-Sífilis Gestantes", "Indicador 11 PQAVS (%)"),
+          rownames = FALSE)
+
+
+```
+
+
+
+### Série temporal do indicador 11 evolução mensal
+
+
+```{r}
+
+###### Obter o gráfico
+# Converter Mes_Ano em formato de data para ordenação correta no gráfico
+tabela_final_2<- tabela_final %>%
+  filter(Mes_Ano != "Total Geral") %>%  # Remover a linha do total geral para o gráfico
+  mutate(Mes_Ano = as.Date(paste0(Mes_Ano, "-01"), format = "%Y-%m-%d"))
+
+
+library(ggplot2)
+
+# Criar o gráfico com grade e eixo Y limitado de 0 a 50%
+grafico_evolucao <- ggplot(tabela_final_2, aes(x = Mes_Ano, y = Indicador)) +
+  geom_line(color = "darkblue", size = 1) +  # Linha de evolução
+  geom_point(color = "darkorange", size = 3) +  # Pontos nos meses
+  labs(
+    title = "Evolução Mensal do % de Casos de Sífilis Congênita  \n  Indicador 11-PQAVS ano 2022",
+    x = "Mês/Ano",
+    y = "Indicador 11 PQAVS (%)"
+  ) +
+  scale_x_date(
+    date_breaks = "1 month",  # Mostrar rótulos a cada mês
+    date_labels = "%b %Y"    # Formato: mês abreviado e ano (Ex.: Jan 2023)
+  ) +
+  scale_y_continuous(
+    limits = c(0, 50),       # Limitar eixo Y de 0 a 50%
+    breaks = seq(0, 50, 10), # Dividir o eixo Y de 10 em 10%
+    labels = function(x) paste0(x, "%")  # Adicionar o símbolo de % nos rótulos
+  ) +
+  theme_minimal() +  # Tema limpo
+  theme(
+    panel.grid.major = element_line(color = "gray", size = 0.5),  # Grade principal
+    panel.grid.minor = element_line(color = "lightgray", size = 0.25),  # Grade secundária
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotação dos rótulos do eixo X
+    plot.title = element_text(hjust = 0.5, face = "bold")  # Centralizar o título
+  )
+
+
+# Usando pacote {plotly} para tornar gráfico mais dinâmico
+ggplotly(grafico_evolucao)
+
+```
+
+
+### Distribuição geográfica interativa do resultado do Indicador 11
+
+```{r}
+
+## Comando padrão para construção de mapas
+###### Intervalos 
+# Encontrar o mínimo e o máximo do indicador
+min_indicador <- min(dados_final$Indicador, na.rm = TRUE)
+max_indicador <- max(dados_final$Indicador, na.rm = TRUE)
+
+
+# Definir intervalos e cores
+brks <- c(min_indicador, 1, 14, max_indicador) ## intervalos criados
+#cols <- brewer.pal(3, "Accent") ## paleta de cores do RcolorBrewer
+
+
+## Saber as cores da paleta do RcolorBrewer
+#library(RColorBrewer)
+#par(mar=c(3,4,2,2))
+#display.brewer.all()
+
+
+
+####################################################################
+# Mapa usando ggplot2
+## novas cores
+cols <- brewer.pal(3, "Accent") ## paleta de cores do RcolorBrewer
+
+# Criar uma coluna categórica para os intervalos
+dados_final$Indicador_cat <- cut(
+  dados_final$Indicador,
+  breaks = brks,
+  labels = c("Menos de 1", "1 a 14", "Mais de 14"),
+  include.lowest = TRUE
+)
+
+# Plotar o mapa com ggplot2
+mapa=ggplot(data = dados_final) +
+  geom_sf(aes(fill = Indicador_cat), color = "white") +
+  scale_fill_manual(
+    values = cols,  ## O scale_fill_manual permite definir as cores diretamente do brewer.paletas
+    name = "Proporção de Casos de Sífilis\n Congênita por Município- PR",
+    labels = c("Menos de 1%", "1% a 14%", "Mais de 14%")
+  ) +
+  labs(
+    title = "Proporção de Casos de Sífilis Congênita por Município - PR",
+    subtitle = "Dados de Vigilância Epidemiológica"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "top",
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5, size = 12)
+  )
+
+ggplotly(mapa)
+###------------------------ fim do indicador 13 [daqui pra baixo ] ------------------------####
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Indicador 13 - PQA-VS
+
+<font size="4">Este painel é um produto do **Curso Análise e Visualização de Dados com Software R aplicadas à Vigilância em Saúde e Ambiente**, do Programa de Fortalecimento da Epidemiologia nos Serviços de Saúde - PROFEPI. Uma parceria do Ministério da Saúde, por meio da Secretaria de Vigilância em Saúde e Ambiente - SVSA e Organização Pan Americana da Saúde - OPAS.</font>
+
+## Row {data-height=60}
+
+### <font size="4">**Indicador 13 | PQA-VS | Paraná | 2022**</font>
+
+**Definição do indicador:** Proporção de preenchimento dos campos “Ocupação” e “Atividade Econômica (CNAE)” nas notificações de acidente de trabalho, acidente de trabalho com exposição a material biológico e intoxicação exógena segundo município de notificação. Para mais informações sobre o Programa de Qualificação das Ações de Vigilância em Saúde (PQA-VS), acesse [o site do programa.](https://www.gov.br/saude/pt-br/acesso-a-informacao/acoes-e-programas/pqa-vs "Link site do PQA-VS")
+
+## Row {data-height="130"}
+
+### Meta indicador 13
+
+```{r}
+# Cálculo da meta
+# Notificações com CBO Ok
+cbo_ok <- sum(dashboard_ind13$cbo_ok, na.rm = T)
+
+# Notificações com CNAE Ok
+cnae_ok <- sum(dashboard_ind13$cnae_ok, na.rm = T)
+
+# Total de notificações
+
+notificacoes <- sum(dashboard_ind13$notif, na.rm = T)
+
+# Cálculo Passo 1
+
+prop_cbo <- cbo_ok/notificacoes
+
+# Cálculo Passo 2
+
+prop_cnae <- cnae_ok/notificacoes
+
+# Indicador 13
+
+indicador13 <- (prop_cbo + prop_cnae)/2 * 100
+
+# Criação do medidor com gauge()
+
+gauge(indicador13, min = 0, max = 100, symbol = '%',
+      gaugeSectors(success = c(60, 100),
+                   warning = c(40,59),
+                   danger = c(0,39)))
+
+
+```
+
+### Número de notificações
+
+```{r}
+
+valueBox(notificacoes,
+         icon = "fa-solid fa-magnifying-glass")
+
+```
+
+
+### Municípios com notificação
+
+```{r}
+
+municipio_not <- nrow(dashboard_ind13)
+
+valueBox(municipio_not,
+         icon = "fa-solid fa-building-flag")
+
+```
+
+
+### Municípios na meta
+
+```{r}
+
+municipio_meta <- dashboard_ind13 |> 
+                  filter(ind13 >= 60) |>
+                  nrow()
+
+valueBox(municipio_meta,
+         icon = "fa-solid fa-check",
+         color = "#08519c")
+
+```
+
+
+### Municípios abaixo da meta
+
+```{r}
+
+municipio_abaixo <- dashboard_ind13 |> 
+                  filter(ind13 < 60) |>
+                  nrow()
+
+valueBox(municipio_abaixo,
+         icon = "fa-solid fa-circle-xmark",
+         color = "#e34a33")
+
+```
+
+
+## Row
+
+### <font size="4">**Desempenho por Regionais de Saúde**</font>
+
+```{r}
+
+# Agregando os dados por regionais de saúde
+
+mapa_regionais <- dashboard_ind13  |> 
+                  group_by(nm_regiona)  |> 
+                  summarize(geometry = st_union(geometry), # União de geometrias
+                            notificacoes = sum(notif),
+                            cbo_ok_rs = sum(cbo_ok),
+                            cnae_ok_rs = sum(cnae_ok),
+                            ind13 = round(((cbo_ok_rs/notificacoes) +
+                                    (cnae_ok_rs/notificacoes))/2 * 100, 2))
+
+# Ajustando as geometrias, antes de plotar o gráfico com {ggplot2}
+
+mapa_regionais <- st_cast(mapa_regionais, "MULTIPOLYGON", warn = FALSE)
+
+# Criando o mapa com {ggplot2}
+
+mapa_rs <- ggplot(data = mapa_regionais,
+                  aes(fill = ind13,
+                      text = paste("Regional:", nm_regiona,
+                                   "<br>Resultado:", ind13))) +
+            geom_sf() +
+            theme_minimal()+
+            labs(fill = "Indicador 13") +
+            theme(
+              legend.position = "bottom",
+              legend.justification = "bottom",
+              legend.title = element_text(face = "bold",
+                                          size = 12L)) +
+            guides(
+              fill = guide_colorbar(
+                title.position = "top",     # Título da legenda na parte superior
+                title.hjust = 0.5,          # Centralizar o título
+                barwidth = 20,              # Largura da barra
+                barheight = 1,              # Altura da barra
+                ticks = TRUE))
+
+
+ggplotly(mapa_rs, tooltip = "text")
+
+```
+
+### <font size="4">**Desempenho por Macrorregiões de saúde**</font>
+
+```{r}
+
+# Criar uma tabela resumida por macrorregião de saúde
+
+tabela_macro <- dashboard_ind13 |> 
+                as.data.frame() |> # remove as geometrias
+                group_by(macro) |>
+                summarise(notificacoes = sum(notif),
+                          cbo_ok_mr = sum(cbo_ok),
+                            cnae_ok_mr = sum(cnae_ok),
+                            ind13 = round(((cbo_ok_mr/notificacoes) +
+                                    (cnae_ok_mr/notificacoes))/2 * 100, 2))
+
+# Seleciona apenas a variáveis que serão exibidas
+
+tabela_exibicao <- tabela_macro |>
+                   select(macro, notificacoes, ind13)
+
+# Cria uma coluna com conteúdo html para visualização
+
+tabela_exibicao <- tabela_exibicao |>
+                mutate(barra_html = paste0(
+                  '<div style="background-color: #ddd; width: 100%; height: 20px;">',
+                  '<div style="background-color: #007bff; width: ',
+                  ind13, '%; height: 100%;"></div>',
+                  '</div>'
+                ))
+
+# Cria a tabela com DT para a exibição por macrorregionais
+
+# Criando a tabela com DT
+datatable(
+  tabela_exibicao, # Fonte de dados
+  escape = FALSE, # Permite interpretar HTML na tabela
+  rownames = FALSE, # Remove o nome das linhas
+  options = list(
+    pageLength = 5,          # Número de linhas por página
+    dom = "tpi",             # Exibe tabela, busca e paginação
+    columnDefs = list(
+      list(targets = 0, width = "75px"), # Ajusta a largura
+      list(targets = 1, width = "75px", className = 'dt-center'), # centraliza 
+      list(targets = 2, width = "75px", className = 'dt-center'), # centraliza
+      list(targets = 3, width = "100px") # Ajusta a largura
+    )
+  ),
+  colnames = c("Macrorregional", "Notificações",
+               "Indicador 13 (%)", "Resultado")
+)
+
+
+```
+
+## Row 
+
+### <font size="4">**Detalhamento do Indicador 13 por município**</font>
+
+```{r}
+
+# Cria uma tabela por município
+
+tabela_mun_ind13 <- dashboard_ind13 |>
+                    as.data.frame() |>
+                    select(-geometry) |>
+                    mutate(ind13 = round(ind13, 2))
+                    
+
+datatable(
+  tabela_mun_ind13,
+  options = list(
+    pageLength = 20,        # Número de linhas por página
+    dom = "tpi",            # Exibe apenas tabela, busca geral e paginação
+    autoWidth = TRUE       # Ajusta a largura automaticamente
+    ),
+  rownames = FALSE,
+  filter = "top",          # Adiciona caixas de busca no topo de cada coluna
+  colnames = c("Município", "Regional de saúde", 
+               "Macrorregião", "Notificações",
+               "CBO adequado", "CNAE adequado",
+               "Resultado indicador", "Alcance da meta"))
+
+###---------------------------- fim do indicador 13 ----------------------------####               
+```
+
+
+
+
+
+
+
+
+```{r setup2, include=FALSE}
+###------------------------inicio do indicador 14 ------------------------####
+#### Observação sem o componente em shiny ############################
+#Carregar pacotes para dashboards
+library(flexdashboard)
+library(sf)
+library(tidyverse)
+library(plotly)
+library(DT)
+library(shiny)
+
+# Carregar outros pacotes necessários
+library(dplyr)
+library(ggplot2)
+library(kableExtra)
+library(gt)
+library(rio)        
+library(tidyverse)  
+library(janitor)    
+library(lubridate) 
+
+# Definindo a pasta de trabalho
+setwd("/Users/elisangelalizzi/Documents/OPAS- Ministério da Saúde/Curso - R para vigilância em Saúde - Nível 02/Produção de conteúdo/Dados")
+
+# Carregar os dados
+nindinet <- import("NINDINET_PROFEPI.dbf")
+municipios <- import("MUNICNET.dbf")
+pr <- st_read("PR_Municipios_2022.shp")
+
+
+
+# Filtrar os casos de violência interpessoal e autoprovocada (ID_Agravo correspondente)
+dados_filtrados <- nindinet %>%
+  filter(ID_AGRAVO == "Y09")
+
+# Filtrar as notificações com raça/cor válida (categorias 1, 2, 3, 4, 5)
+dados_validos <- dados_filtrados %>%
+  filter(CS_RACA %in% c(1, 2, 3, 4, 5))
+
+# Contar total de notificações com raça/cor preenchido por município e raça/cor
+numerador <- dados_validos %>%
+  group_by(ID_MUNICIP, CS_RACA) %>%
+  summarise(Total_Valido = n())
+
+# Contar total de notificações por município
+denominador <- dados_filtrados %>%
+  group_by(ID_MUNICIP) %>%
+  summarise(Total_Notificacoes = n())
+
+# Juntar os dados
+resultado <- left_join(numerador, denominador, by = "ID_MUNICIP")
+
+# Calcular o indicador por município e por raça/cor
+resultado <- resultado %>%
+  mutate(Indicador = round((Total_Valido / Total_Notificacoes),4) * 100)
+
+# Adicionar uma linha para o total geral por raça/cor
+resultado_total <- resultado %>%
+  group_by(CS_RACA) %>%
+  summarise(ID_MUNICIP = "Total Geral",
+            Total_Valido = sum(Total_Valido, na.rm = TRUE),
+            Total_Notificacoes = sum(Total_Notificacoes, na.rm = TRUE),
+            Indicador = (Total_Valido / Total_Notificacoes) * 100)
+
+
+
+# Juntar o total geral ao resultado
+tabela_final <- bind_rows(resultado, resultado_total)
+
+
+### No shapefile atenção para o número de digitos do código.
+## Fazendo a conversão ###
+# Converter coluna ID_MUNICIP para o mesmo tipo do banco de dados
+# Converter CD_MUN para caracteres e criar ID_MUNICIP com os primeiros 6 dígitos
+pr$ID_MUNICIP <- substr(as.character(pr$CD_MUN), 1, 6)
+municipios$ID_MUNICIP <- as.character(municipios$ID_MUNICIP)
+
+
+# Adicionar os nomes dos municípios (vinculando com a tabela `municipios`)
+tabela_final <- tabela_final %>%
+  left_join(municipios %>% select(ID_MUNICIP, NM_MUNICIP), by = "ID_MUNICIP")
+names(tabela_final)
+
+# Reordenar as colunas para exibir o nome dos municípios primeiro (opcional)
+tabela_final <- tabela_final %>%
+  select(NM_MUNICIP, ID_MUNICIP,CS_RACA,Total_Valido,Total_Notificacoes,Indicador)
+
+# Adicionar rótulos para raça/cor
+tabela_final <- tabela_final %>%
+  mutate(
+    CS_RACA = factor(
+      CS_RACA,
+      levels = 1:5,
+      labels = c("Branca", "Preta", "Amarela", "Parda", "Indígena")
+    )
+  )
+
+
+
+
+# Criar tabela formatada com gt
+tabela_indicador_raca <- tabela_final %>%
+  gt() %>%
+  tab_header(
+    title = "Indicador de Notificações por Município e Raça/Cor"
+  ) %>%
+  cols_label(
+    NM_MUNICIP = "Município",
+    CS_RACA = "Raça/Cor",
+    Total_Valido = "Total Notificações Válidas",
+    Total_Notificacoes = "Total de Notificações",
+    Indicador = "Indicador (%)"
+  ) %>%
+  fmt_number(
+    columns = Indicador,
+    decimals = 2
+  ) %>%
+  tab_options(
+    table.width = pct(100),
+    row.striping.include_table_body = TRUE
+  )
+
+tabela_indicador_raca
+
+```
+
+# Indicador 14 - PQA-VS
+
+<font size="4">Este painel é um produto do **Curso Análise e Visualização de Dados com Software R aplicadas à Vigilância em Saúde e Ambiente**, do Programa de Fortalecimento da Epidemiologia nos Serviços de Saúde - PROFEPI. Uma parceria do Ministério da Saúde, por meio da Secretaria de Vigilância em Saúde e Ambiente - SVSA e Organização Pan Americana da Saúde - OPAS.</font>
+
+## Row {data-height=60}
+
+### <font size="5">**Indicador 14 | PQA-VS | Paraná | 2022**</font>
+
+**Definição do indicador:** Indicador: Proporção de notificações de violência interpessoal e autoprovocada com o campo raça/cor preenchido com informação válida. [o site do programa.]
+(https://www.gov.br/saude/pt-br/acesso-a-informacao/acoes-e-programas/pqa-vs "Link site do PQA-VS")
+
+## Row {data-height="130"}
+
+### Meta indicador 14
+
+```{r}
+
+# Cálculo da meta
+#Indicador: Proporção de notificações de violência interpessoal e autoprovocada com o campo raça/cor preenchido #com informação válida
+
+# Notificações de casos de violência interpessoal e autoprovocada
+contagem1 <- nrow(dados_filtrados)
+
+# Notificações de casos de violência interpessoal e autoprovocada com raça/cor válida
+contagem2 <- nrow(dados_validos)
+
+
+# Indicador 14
+indicador14 <- (contagem2/ contagem1) * 100
+
+# Criação do medidor com gauge()
+gauge(indicador14, min = 0, max = 100, symbol = '%',
+      gaugeSectors(success = c(60, 100), warning = c(40,59), danger = c(0,39)))
+
+```
+
+### Número de Notificações de casos de violência interpessoal e autoprovocada 
+```{r}
+# Notificações de casos de violência interpessoal e autoprovocada
+contagem1 <- nrow(dados_filtrados)
+valueBox(contagem1,
+         icon ="fa-solid fa-triangle-exclamation", color="info")
+??valuesBox
+```
+
+
+### Número de Notificações de casos de violência interpessoal e autoprovocada com raça/cor válida
+
+```{r}
+# Notificações de casos de violência interpessoal e autoprovocada com raça/cor válida
+contagem2 <- nrow(dados_validos)
+valueBox(contagem2,
+         icon ="fa-solid fa-person-walking",color="info")
+
+```
+
+
+### Municípios com notificações
+
+```{r}
+
+# Contar o número de municípios distintos
+num_municipios <- tabela_final %>%
+  summarise(Total_Municipios = n_distinct(ID_MUNICIP))
+
+# Exibir o resultado
+contagem_mun<- nrow(num_municipios)
+
+valueBox(contagem_mun,
+         icon = "fa-solid fa-building",color="warning")
+
+```
+
+
+
+## Row
+
+### <font size="4">**Proporção de Notificações por raça/cor válida **</font>
+
+```{r}
+
+# Criar uma tabela resumida por municipio com o componentes de raça/cor em uma coluna
+
+# Calcular totais gerais por raça/cor
+totais_por_raca <- tabela_final %>%
+  group_by(CS_RACA) %>%
+  summarise(
+    Total_Notificacoes = sum(Total_Notificacoes, na.rm = TRUE),
+    Total_Valido = sum(Total_Valido, na.rm = TRUE),
+    Indicador_Geral = round((Total_Valido / Total_Notificacoes) * 100, 2)
+  )
+
+# Exibir os totais no console
+#print(totais_por_raca)
+
+
+# Gerar tabela bonita em HTML formatada com os totais por raça/cor
+tabela_painel <- totais_por_raca %>%
+  gt() %>%
+  tab_header(
+    title = "Totais Gerais por Raça/Cor"
+  ) %>%
+  cols_label(
+    CS_RACA = "Raça/Cor",
+    Total_Notificacoes = "Total de Notificações",
+    Total_Valido = "Total Notificações Válidas",
+    Indicador_Geral = "Indicador Geral (%)"
+  ) %>%
+  fmt_number(
+    columns = Indicador_Geral,
+    decimals = 2
+  )
+
+# Exibir a tabela
+tabela_painel
+
+```
+
+### <font size="4">**Gráfico Descritivo por Raça/Cor**</font>
+
+```{r grafico-indicador14, fig.width=8, fig.height=5, echo=FALSE}
+
+
+# Ordenar os dados em ordem decrescente
+totais_por_raca_ordenado <- totais_por_raca %>%
+  arrange(desc(Indicador_Geral)) # Ordem decrescente
+
+# Gráfico animado
+grafico_estatico <- plot_ly(
+  data = totais_por_raca_ordenado,
+  x = ~reorder(CS_RACA, -Indicador_Geral), # Ordena o eixo X pelo Indicador_Geral
+  y = ~Indicador_Geral,
+  type = "bar",
+  text = ~paste0(Indicador_Geral, "%"), # Rótulos com valores percentuais
+  textposition = "outside",
+  marker = list(color = "blue") # Cor das barras
+) %>%
+  layout(
+    title = "Indicador Geral por Raça/Cor<br>Notificações de Violência",
+    xaxis = list(title = "Raça/Cor"),
+    yaxis = list(title = "Indicador Geral (%)", range = c(0, 100)), # Define eixo Y de 0 a 100
+    showlegend = FALSE
+  )
+
+grafico_estatico
+
+
+```
+
+
+
+
+
+## Row 
+
+### <font size="4">**Detalhamento do Indicador 14 por município e Raça/Cor **</font>
+
+```{r}
+
+# Cria uma tabela por município
+## fizemos a tabela na etapa de pré processamento
+                    
+datatable(tabela_final,
+  options = list(
+    pageLength = 20,        # Número de linhas por página
+    dom = "tpi",            # Exibe apenas tabela, busca geral e paginação
+    autoWidth = TRUE       # Ajusta a largura automaticamente
+    ),
+  rownames = FALSE,
+  filter = "top",          # Adiciona caixas de busca no topo de cada coluna
+  colnames = c("Município", "ID-MUNICIP", 
+               "Raça/Cor", "Total_Valido",
+               "Total_Notificacoes", "Indicador-14"))
+
+###----------------------------- fim do  indicador 14  -------------------------####
+```
+

@@ -1,0 +1,310 @@
+---
+title: "Monitoramento Indicadores PQA-VS"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+logo: "IMAGENS/logo_profepi.png"
+---
+
+
+```{r setup, include=FALSE}
+#Carregar pacotes para dashboards
+library(flexdashboard)
+library(sf)
+library(tidyverse)
+library(plotly)
+library(DT)
+library(shiny)
+
+# Carregar outros pacotes necessários
+library(dplyr)
+library(ggplot2)
+library(kableExtra)
+library(gt)
+library(rio)        
+library(tidyverse)  
+library(janitor)    
+library(lubridate) 
+
+# Definindo a pasta de trabalho
+setwd("/Users/elisangelalizzi/Documents/OPAS- Ministério da Saúde/Curso - R para vigilância em Saúde - Nível 02/Produção de conteúdo/Dados")
+
+# Carregar os dados
+nindinet <- import("NINDINET_PROFEPI.dbf")
+municipios <- import("MUNICNET.dbf")
+pr <- st_read("PR_Municipios_2022.shp")
+
+
+
+# Filtrar os casos de violência interpessoal e autoprovocada (ID_Agravo correspondente)
+dados_filtrados <- nindinet %>%
+  filter(ID_AGRAVO == "Y09")
+
+# Filtrar as notificações com raça/cor válida (categorias 1, 2, 3, 4, 5)
+dados_validos <- dados_filtrados %>%
+  filter(CS_RACA %in% c(1, 2, 3, 4, 5))
+
+# Contar total de notificações com raça/cor preenchido por município e raça/cor
+numerador <- dados_validos %>%
+  group_by(ID_MUNICIP, CS_RACA) %>%
+  summarise(Total_Valido = n())
+
+# Contar total de notificações por município
+denominador <- dados_filtrados %>%
+  group_by(ID_MUNICIP) %>%
+  summarise(Total_Notificacoes = n())
+
+# Juntar os dados
+resultado <- left_join(numerador, denominador, by = "ID_MUNICIP")
+
+# Calcular o indicador por município e por raça/cor
+resultado <- resultado %>%
+  mutate(Indicador = round((Total_Valido / Total_Notificacoes),4) * 100)
+
+# Adicionar uma linha para o total geral por raça/cor
+resultado_total <- resultado %>%
+  group_by(CS_RACA) %>%
+  summarise(ID_MUNICIP = "Total Geral",
+            Total_Valido = sum(Total_Valido, na.rm = TRUE),
+            Total_Notificacoes = sum(Total_Notificacoes, na.rm = TRUE),
+            Indicador = (Total_Valido / Total_Notificacoes) * 100)
+
+
+
+# Juntar o total geral ao resultado
+tabela_final <- bind_rows(resultado, resultado_total)
+
+
+### No shapefile atenção para o número de digitos do código.
+## Fazendo a conversão ###
+# Converter coluna ID_MUNICIP para o mesmo tipo do banco de dados
+# Converter CD_MUN para caracteres e criar ID_MUNICIP com os primeiros 6 dígitos
+pr$ID_MUNICIP <- substr(as.character(pr$CD_MUN), 1, 6)
+municipios$ID_MUNICIP <- as.character(municipios$ID_MUNICIP)
+
+
+# Adicionar os nomes dos municípios (vinculando com a tabela `municipios`)
+tabela_final <- tabela_final %>%
+  left_join(municipios %>% select(ID_MUNICIP, NM_MUNICIP), by = "ID_MUNICIP")
+names(tabela_final)
+
+# Reordenar as colunas para exibir o nome dos municípios primeiro (opcional)
+tabela_final <- tabela_final %>%
+  select(NM_MUNICIP, ID_MUNICIP,CS_RACA,Total_Valido,Total_Notificacoes,Indicador)
+
+# Adicionar rótulos para raça/cor
+tabela_final <- tabela_final %>%
+  mutate(
+    CS_RACA = factor(
+      CS_RACA,
+      levels = 1:5,
+      labels = c("Branca", "Preta", "Amarela", "Parda", "Indígena")
+    )
+  )
+
+
+
+
+# Criar tabela formatada com gt
+tabela_indicador_raca <- tabela_final %>%
+  gt() %>%
+  tab_header(
+    title = "Indicador de Notificações por Município e Raça/Cor"
+  ) %>%
+  cols_label(
+    NM_MUNICIP = "Município",
+    CS_RACA = "Raça/Cor",
+    Total_Valido = "Total Notificações Válidas",
+    Total_Notificacoes = "Total de Notificações",
+    Indicador = "Indicador (%)"
+  ) %>%
+  fmt_number(
+    columns = Indicador,
+    decimals = 2
+  ) %>%
+  tab_options(
+    table.width = pct(100),
+    row.striping.include_table_body = TRUE
+  )
+
+#tabela_indicador_raca
+
+```
+
+# Indicador 14 - PQA-VS
+
+<font size="4">Este painel é um produto do **Curso Análise e Visualização de Dados com Software R aplicadas à Vigilância em Saúde e Ambiente**, do Programa de Fortalecimento da Epidemiologia nos Serviços de Saúde - PROFEPI. Uma parceria do Ministério da Saúde, por meio da Secretaria de Vigilância em Saúde e Ambiente - SVSA e Organização Pan Americana da Saúde - OPAS.</font>
+
+## Row {data-height=60}
+
+### <font size="5">**Indicador 14 | PQA-VS | Paraná | 2022**</font>
+
+**Definição do indicador:** Indicador: Proporção de notificações de violência interpessoal e autoprovocada com o campo raça/cor preenchido com informação válida. [o site do programa.]
+(https://www.gov.br/saude/pt-br/acesso-a-informacao/acoes-e-programas/pqa-vs "Link site do PQA-VS")
+
+## Row {data-height="130"}
+
+### Meta indicador 14
+
+```{r}
+
+# Cálculo da meta
+#Indicador: Proporção de notificações de violência interpessoal e autoprovocada com o campo raça/cor preenchido #com informação válida
+
+# Notificações de casos de violência interpessoal e autoprovocada
+contagem1 <- nrow(dados_filtrados)
+
+# Notificações de casos de violência interpessoal e autoprovocada com raça/cor válida
+contagem2 <- nrow(dados_validos)
+
+
+# Indicador 14
+indicador14 <- (contagem2/ contagem1) * 100
+
+# Criação do medidor com gauge()
+gauge(indicador14, min = 0, max = 100, symbol = '%',
+      gaugeSectors(success = c(60, 100), warning = c(40,59), danger = c(0,39)))
+
+```
+
+### Número de Notificações de casos de violência interpessoal e autoprovocada 
+```{r}
+# Notificações de casos de violência interpessoal e autoprovocada
+contagem1 <- nrow(dados_filtrados)
+valueBox(contagem1,
+         icon ="fa-solid fa-triangle-exclamation", color="info")
+??valuesBox
+```
+
+
+### Número de Notificações de casos de violência interpessoal e autoprovocada com raça/cor válida
+
+```{r}
+# Notificações de casos de violência interpessoal e autoprovocada com raça/cor válida
+contagem2 <- nrow(dados_validos)
+valueBox(contagem2,
+         icon ="fa-solid fa-person-walking",color="info")
+
+```
+
+
+### Municípios com notificações
+
+```{r}
+
+# Contar o número de municípios distintos
+num_municipios <- tabela_final %>%
+  summarise(Total_Municipios = n_distinct(ID_MUNICIP))
+
+# Exibir o resultado
+contagem_mun<- nrow(num_municipios)
+
+valueBox(contagem_mun,
+         icon = "fa-solid fa-building",color="warning")
+
+```
+
+
+
+## Row
+
+### <font size="4">**Proporção de Notificações por raça/cor válida **</font>
+
+```{r}
+
+# Criar uma tabela resumida por municipio com o componentes de raça/cor em uma coluna
+
+# Calcular totais gerais por raça/cor
+totais_por_raca <- tabela_final %>%
+  group_by(CS_RACA) %>%
+  summarise(
+    Total_Notificacoes = sum(Total_Notificacoes, na.rm = TRUE),
+    Total_Valido = sum(Total_Valido, na.rm = TRUE),
+    Indicador_Geral = round((Total_Valido / Total_Notificacoes) * 100, 2)
+  )
+
+# Exibir os totais no console
+#print(totais_por_raca)
+
+
+# Gerar tabela bonita em HTML formatada com os totais por raça/cor
+tabela_painel <- totais_por_raca %>%
+  gt() %>%
+  tab_header(
+    title = "Totais Gerais por Raça/Cor"
+  ) %>%
+  cols_label(
+    CS_RACA = "Raça/Cor",
+    Total_Notificacoes = "Total de Notificações",
+    Total_Valido = "Total Notificações Válidas",
+    Indicador_Geral = "Indicador Geral (%)"
+  ) %>%
+  fmt_number(
+    columns = Indicador_Geral,
+    decimals = 2
+  )
+
+# Exibir a tabela
+tabela_painel
+
+```
+
+### <font size="4">**Gráfico Descritivo por Raça/Cor**</font>
+
+```{r grafico-indicador14, fig.width=8, fig.height=5, echo=FALSE}
+
+
+# Ordenar os dados em ordem decrescente
+totais_por_raca_ordenado <- totais_por_raca %>%
+  arrange(desc(Indicador_Geral)) # Ordem decrescente
+
+# Gráfico animado
+grafico_estatico <- plot_ly(
+  data = totais_por_raca_ordenado,
+  x = ~reorder(CS_RACA, -Indicador_Geral), # Ordena o eixo X pelo Indicador_Geral
+  y = ~Indicador_Geral,
+  type = "bar",
+  text = ~paste0(Indicador_Geral, "%"), # Rótulos com valores percentuais
+  textposition = "outside",
+  marker = list(color = "blue") # Cor das barras
+) %>%
+  layout(
+    title = "Indicador Geral por Raça/Cor<br>Notificações de Violência",
+    xaxis = list(title = "Raça/Cor"),
+    yaxis = list(title = "Indicador Geral (%)", range = c(0, 100)), # Define eixo Y de 0 a 100
+    showlegend = FALSE
+  )
+
+grafico_estatico
+
+
+```
+
+
+
+
+
+## Row 
+
+### <font size="4">**Detalhamento do Indicador 14 por município e Raça/Cor **</font>
+
+```{r}
+
+# Cria uma tabela por município
+## fizemos a tabela na etapa de pré processamento
+                    
+datatable(tabela_final,
+  options = list(
+    pageLength = 20,        # Número de linhas por página
+    dom = "tpi",            # Exibe apenas tabela, busca geral e paginação
+    autoWidth = TRUE       # Ajusta a largura automaticamente
+    ),
+  rownames = FALSE,
+  filter = "top",          # Adiciona caixas de busca no topo de cada coluna
+  colnames = c("Município", "ID-MUNICIP", 
+               "Raça/Cor", "Total_Valido",
+               "Total_Notificacoes", "Indicador-14"))
+
+               
+```
